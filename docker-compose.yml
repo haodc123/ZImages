@@ -1,64 +1,73 @@
-version: '2.0'
+version: '3.4'
+x-logging:
+  &default-logging
+  driver: "json-file"
+  options:
+    max-file: "5"
+    max-size: "20m"
+
 services:
-  app:
+
+  mailhog:
+    image: mailhog/mailhog
+    restart: unless-stopped
+    #ports:
+    #  - '127.0.0.1:1025:1025'
+    logging: *default-logging
+
+  zdb:
+    container_name: zdb
+    image: mysql:5.7
+    platform: linux/x86_64
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: z
+      MYSQL_PASSWORD: root
+    # volumes:
+      # - ./docker/mariadb/config:/etc/mysql/conf.d:ro
+      # - ./db/data:/var/lib/mysql
+    command: mysqld --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    ports:
+      - 3309:3306
+
+  zphpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    environment:
+      - PMA_ARBITRARY=1
+      - PMA_HOSTS=zdb
+      - PMA_USER=root
+      - PMA_PASSWORD=root
+    volumes:
+      - ./docker/phpmyadmin/phpmyadmin-misc.ini:/usr/local/etc/php/conf.d/phpmyadmin-misc.ini
+    depends_on:
+      - zdb
+    ports:
+      - 8081:80
+
+  #### For Laravel
+  zphp:
+    container_name: zphp
     build:
       context: .
-      dockerfile: Dockerfile
-    image: cloudsigma.com/php
-    container_name: app
-    restart: unless-stopped
-    # command: ['/var/www/html/entrypoint.sh']
-    tty: true
+      dockerfile: ./docker/laravel-php/Dockerfile
+    volumes:
+      - ./web:/var/www
+      - ./docker/laravel-php/php.ini:/usr/local/etc/php/php.ini
+      # - data-volume:/var/lib/share
     environment:
-      SERVICE_NAME: app
-      SERVICE_TAGS: dev
-    working_dir: /var/www/html/
-    volumes:
-      - ./web/:/var/www/html/
-      - ./config/php/laravel.ini:/usr/local/etc/php/conf.d/laravel.ini
-    networks:
-      - app-network
+      COMPOSER_MEMORY_LIMIT: -1
+    depends_on:
+      - zdb
 
-  webserver:
-    image: nginx:alpine
-    container_name: webserver
-    restart: unless-stopped
-    tty: true
+  znginx:
+    image: nginx
+    container_name: znginx
     ports:
-      - "82:82"
-      - "443:443"
+      - 81:80
     volumes:
-      - ./web/:/var/www/html/
-      - ./config/nginx/conf.d/:/etc/nginx/conf.d/
-    networks:
-      - app-network
-
-  db:
-    platform: linux/x86_64
-    image: mysql:5.7.32
-    container_name: db
-    restart: unless-stopped
-    tty: true
-    ports:
-      - "3306:3306"
-    environment:
-      MYSQL_DATABASE: z_image
-      MYSQL_USER: root
-      MYSQL_ROOT_PASSWORD: 123456
-      MYSQL_PASSWORD: 123456
-      SERVICE_TAGS: dev
-      SERVICE_NAME: mysql
-    volumes:
-      - dbdata:/var/lib/mysql/
-      - ./config/mysql/my.cnf:/etc/mysql/my.cnf
-    networks:
-      - app-network
-
-#Docker Networks
-networks:
-  app-network:
-    driver: bridge
-#Volumes
-volumes:
-  dbdata:
-    driver: local
+      - ./web:/var/www
+      - ./docker/laravel-nginx/dev.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - zphp
+    links:
+      - zphp
