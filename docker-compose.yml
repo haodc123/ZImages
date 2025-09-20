@@ -17,15 +17,14 @@ services:
 
   zdb:
     container_name: zdb
-    image: mysql:5.7
+    image: mysql:8.0
     platform: linux/x86_64
+    restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root
+      MYSQL_ROOT_PASSWORD: 123456
       MYSQL_DATABASE: z
-      MYSQL_PASSWORD: root
-    # volumes:
-      # - ./docker/mariadb/config:/etc/mysql/conf.d:ro
-      # - ./db/data:/var/lib/mysql
+    volumes:
+      - ./db:/var/lib/mysql
     command: mysqld --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     ports:
       - 3309:3306
